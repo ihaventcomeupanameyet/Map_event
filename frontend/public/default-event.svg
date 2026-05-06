@@ -1,0 +1,13 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="800" fill="#0F172A"/>
+  <circle cx="987" cy="159" r="204" fill="#164E63"/>
+  <circle cx="262" cy="655" r="240" fill="#155E75"/>
+  <path d="M135 625C242 479 349 406 456 406C563 406 641 472 690 604H135V625Z" fill="#22D3EE"/>
+  <path d="M492 517C608 364 745 288 904 288C1028 288 1117 335 1171 428V687H492V517Z" fill="#0891B2"/>
+  <rect x="127" y="128" width="356" height="356" rx="32" fill="white" fill-opacity="0.1"/>
+  <path d="M242 293C242 266.49 263.49 245 290 245H320.885C336.779 245 351.643 252.855 360.594 265.995L374.63 286.604C383.581 299.744 398.445 307.6 414.339 307.6H426C452.51 307.6 474 329.09 474 355.6V400C474 426.51 452.51 448 426 448H290C263.49 448 242 426.51 242 400V293Z" fill="#F8FAFC"/>
+  <circle cx="329" cy="332" r="34" fill="#FDBA74"/>
+  <path d="M291 411C304.6 381.8 330.333 367.2 368.2 367.2C406.067 367.2 431.133 381.8 443.4 411H291Z" fill="#67E8F9"/>
+  <text x="553" y="141" fill="#E2E8F0" font-family="Arial, sans-serif" font-size="62" font-weight="700">Event Preview</text>
+  <text x="553" y="216" fill="#94A3B8" font-family="Arial, sans-serif" font-size="30">No event image was available for this listing.</text>
+</svg>

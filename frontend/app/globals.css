@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: #d7e4ea;
+  color: #0f172a;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+}
+
+.map-pin {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 3px solid #ffffff;
+  background:
+    radial-gradient(circle at 30% 30%, #67e8f9, #06b6d4 55%, #155e75 100%);
+  box-shadow: 0 8px 18px rgba(8, 145, 178, 0.35);
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.map-pin--active {
+  width: 28px;
+  height: 28px;
+  border-width: 4px;
+  background:
+    radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 55%, #b45309 100%);
+  box-shadow: 0 0 0 8px rgba(251, 191, 36, 0.18), 0 16px 28px rgba(180, 83, 9, 0.42);
+  transform: scale(1.03);
+}
+
+.leaflet-popup-content-wrapper {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 1.25rem;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  width: 280px !important;
+}
+
+.leaflet-popup-tip {
+  background: #ffffff;
+}
+
+.event-popup {
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.event-popup__image {
+  display: block;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  background: linear-gradient(135deg, #dbeafe, #cffafe);
+}
+
+.event-popup__body {
+  padding: 1rem;
+}
+
+.event-popup__eyebrow {
+  margin: 0 0 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.event-popup__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #0f172a;
+}
+
+.event-popup__meta {
+  margin: 0.45rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: #475569;
+}
+
+.event-popup__link {
+  display: inline-flex;
+  margin-top: 0.9rem;
+  border-radius: 999px;
+  background: #0f172a;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #ffffff;
+  text-decoration: none;
+}

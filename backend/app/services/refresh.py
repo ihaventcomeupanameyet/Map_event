@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import Settings, get_settings
+from app.models import Event
+from app.services.ticketmaster import fetch_ticketmaster_events
+
+
+@dataclass
+class RefreshStats:
+    fetched: int
+    upserted: int
+    removed_expired: int
+
+
+async def is_events_table_empty(session: AsyncSession) -> bool:
+    result = await session.scalar(select(func.count()).select_from(Event))
+    return bool(result == 0)
+
+
+async def refresh_events(
+    session: AsyncSession,
+    settings: Settings | None = None,
+    client: httpx.AsyncClient | None = None,
+) -> RefreshStats:
+    settings = settings or get_settings()
+    owns_client = client is None
+    now = datetime.now(timezone.utc)
+
+    if owns_client:
+        client = httpx.AsyncClient()
+
+    try:
+        normalized_events = await fetch_ticketmaster_events(client, settings)
+    finally:
+        if owns_client and client is not None:
+            await client.aclose()
+
+    upserted = 0
+    if normalized_events:
+        records = [{**event, "last_seen_at": now} for event in normalized_events]
+        insert_stmt = pg_insert(Event).values(records)
+        update_columns = {
+            column.name: getattr(insert_stmt.excluded, column.name)
+            for column in Event.__table__.columns
+            if column.name != "id"
+        }
+        upsert_stmt = insert_stmt.on_conflict_do_update(
+            index_elements=[Event.id],
+            set_=update_columns,
+        )
+        result = await session.execute(upsert_stmt)
+        upserted = result.rowcount or len(records)
+
+    expired_condition = or_(
+        and_(Event.end_time.is_not(None), Event.end_time < now),
+        and_(Event.end_time.is_(None), Event.start_time.is_not(None), Event.start_time < now),
+        and_(Event.end_time.is_(None), Event.start_time.is_(None), Event.event_date < now.date()),
+    )
+
+    invalid_location_condition = and_(Event.lat == 0.0, Event.lng == 0.0)
+
+    delete_stmt = delete(Event).where(or_(expired_condition, invalid_location_condition))
+    delete_result = await session.execute(delete_stmt)
+    await session.commit()
+
+    return RefreshStats(
+        fetched=len(normalized_events),
+        upserted=upserted,
+        removed_expired=delete_result.rowcount or 0,
+    )

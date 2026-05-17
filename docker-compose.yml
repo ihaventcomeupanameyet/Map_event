@@ -25,9 +25,15 @@ services:
         condition: service_healthy
     environment:
       TICKETMASTER_API_KEY: ${TICKETMASTER_API_KEY}
+      EVENTBRITE_API_KEY: ${EVENTBRITE_API_KEY}
+      SEATGEEK_CLIENT_ID: ${SEATGEEK_CLIENT_ID}
+      SEATGEEK_CLIENT_SECRET: ${SEATGEEK_CLIENT_SECRET}
       DATABASE_URL: ${DATABASE_URL}
       BACKEND_URL: ${BACKEND_URL}
       WATCHFILES_FORCE_POLLING: "true"
+      GEOCODER_BASE_URL: ${GEOCODER_BASE_URL:-https://nominatim.openstreetmap.org/search}
+      GEOCODER_USER_AGENT: ${GEOCODER_USER_AGENT:-vancouver-event-map/0.1 (+local-dev)}
+      GEOCODER_MIN_INTERVAL_SECONDS: ${GEOCODER_MIN_INTERVAL_SECONDS:-1.0}
     ports:
       - "8000:8000"
     volumes:

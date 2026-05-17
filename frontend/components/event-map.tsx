@@ -33,6 +33,12 @@ function escapeHtml(value: string): string {
 }
 
 
+function buildMarkerHtml(source: EventRecord["source"], isActive: boolean): string {
+  const activeClass = isActive ? " map-pin--active" : "";
+  return `<div class="map-pin map-pin--${source}${activeClass}"></div>`;
+}
+
+
 function buildPopupHtml(event: EventRecord, fallbackImageUrl: string): string {
   const imageUrl = escapeHtml(event.imageUrl || fallbackImageUrl);
   const safeFallbackImageUrl = escapeHtml(fallbackImageUrl);
@@ -137,25 +143,28 @@ export default function EventMap({
     markerLayer.clearLayers();
     markersRef.current.clear();
 
-    const defaultIcon = L.divIcon({
-      className: "",
-      html: '<div class="map-pin"></div>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
-      popupAnchor: [0, -14],
-    });
+    const iconCache = new Map<string, import("leaflet").DivIcon>();
+    const getMarkerIcon = (source: EventRecord["source"], isActive: boolean) => {
+      const cacheKey = `${source}:${isActive ? "active" : "default"}`;
+      const cached = iconCache.get(cacheKey);
+      if (cached) {
+        return cached;
+      }
 
-    const activeIcon = L.divIcon({
-      className: "",
-      html: '<div class="map-pin map-pin--active"></div>',
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-      popupAnchor: [0, -18],
-    });
+      const icon = L.divIcon({
+        className: "",
+        html: buildMarkerHtml(source, isActive),
+        iconSize: isActive ? [28, 28] : [20, 20],
+        iconAnchor: isActive ? [14, 14] : [10, 10],
+        popupAnchor: isActive ? [0, -18] : [0, -14],
+      });
+      iconCache.set(cacheKey, icon);
+      return icon;
+    };
 
     for (const event of events) {
       const marker = L.marker([event.lat, event.lng], {
-        icon: event.id === selectedEventId ? activeIcon : defaultIcon,
+        icon: getMarkerIcon(event.source, event.id === selectedEventId),
       });
 
       marker.bindPopup(buildPopupHtml(event, fallbackImageUrl), {

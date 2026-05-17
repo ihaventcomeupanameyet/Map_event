@@ -11,9 +11,14 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 class Settings(BaseSettings):
     ticketmaster_api_key: str = Field(..., alias="TICKETMASTER_API_KEY")
+    eventbrite_api_key: str | None = Field(None, alias="EVENTBRITE_API_KEY")
+    seatgeek_client_id: str | None = Field(None, alias="SEATGEEK_CLIENT_ID")
+    seatgeek_client_secret: str | None = Field(None, alias="SEATGEEK_CLIENT_SECRET")
     database_url: str = Field(..., alias="DATABASE_URL")
     backend_url: str = Field("http://localhost:8000", alias="BACKEND_URL")
     ticketmaster_base_url: str = "https://app.ticketmaster.com/discovery/v2"
+    eventbrite_base_url: str = "https://www.eventbriteapi.com/v3"
+    seatgeek_base_url: str = "https://api.seatgeek.com/2"
     geocoder_base_url: str = Field(
         "https://nominatim.openstreetmap.org/search",
         alias="GEOCODER_BASE_URL",

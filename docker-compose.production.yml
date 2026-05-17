@@ -39,6 +39,9 @@ services:
         condition: service_healthy
     environment:
       TICKETMASTER_API_KEY: ${TICKETMASTER_API_KEY}
+      EVENTBRITE_API_KEY: ${EVENTBRITE_API_KEY}
+      SEATGEEK_CLIENT_ID: ${SEATGEEK_CLIENT_ID}
+      SEATGEEK_CLIENT_SECRET: ${SEATGEEK_CLIENT_SECRET}
       DATABASE_URL: ${DATABASE_URL}
       BACKEND_URL: ${BACKEND_URL}
       GEOCODER_BASE_URL: ${GEOCODER_BASE_URL:-https://nominatim.openstreetmap.org/search}
@@ -65,4 +68,3 @@ services:
 
 volumes:
   postgres_data:
-

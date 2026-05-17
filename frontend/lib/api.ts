@@ -1,6 +1,6 @@
 export type EventRecord = {
   id: string;
-  source: "ticketmaster";
+  source: "ticketmaster" | "eventbrite" | "seatgeek";
   sourceEventId: string;
   name: string;
   startTime: string | null;
@@ -33,4 +33,3 @@ export async function fetchEvents(selectedDate: string): Promise<EventRecord[]> 
 
   return response.json();
 }
-

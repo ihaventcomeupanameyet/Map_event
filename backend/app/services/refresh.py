@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -10,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.models import Event
+from app.services.eventbrite import fetch_eventbrite_events
+from app.services.seatgeek import fetch_seatgeek_events
 from app.services.ticketmaster import fetch_ticketmaster_events
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -38,7 +44,23 @@ async def refresh_events(
         client = httpx.AsyncClient()
 
     try:
-        normalized_events = await fetch_ticketmaster_events(client, settings)
+        normalized_events = []
+        providers = [
+            ("ticketmaster", fetch_ticketmaster_events),
+            ("eventbrite", fetch_eventbrite_events),
+            ("seatgeek", fetch_seatgeek_events),
+        ]
+        for provider_name, fetcher in providers:
+            try:
+                provider_events = await fetcher(client, settings)
+                normalized_events.extend(provider_events)
+                logger.info(
+                    "Provider refresh completed. provider=%s fetched=%s",
+                    provider_name,
+                    len(provider_events),
+                )
+            except Exception:
+                logger.exception("Provider refresh failed: %s", provider_name)
     finally:
         if owns_client and client is not None:
             await client.aclose()

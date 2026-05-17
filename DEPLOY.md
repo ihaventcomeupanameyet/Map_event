@@ -1,223 +1,134 @@
-# Deploy and Run
+- Deploy and Run (EC2-focused)
 
-## Local development
+This document focuses on deploying the project to an AWS EC2 instance without manually SSH-ing into the machine. It assumes you will use the included user-data script `scripts/ec2-user-data.sh` or a CI-built image flow.
 
-1. Copy `.env.example` to `.env` and fill in:
-   - `TICKETMASTER_API_KEY`
-   - `DATABASE_URL`
-   - `BACKEND_URL`
-2. Start PostgreSQL locally and create a database named `map_event_app`.
-   To create a matching local role/database quickly:
-   ```bash
-   chmod +x scripts/setup-local-postgres.sh
-   ./scripts/setup-local-postgres.sh
-   ```
-3. Start the backend:
-   ```bash
-   cd backend
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   uvicorn app.main:app --reload
-   ```
-4. Start the frontend in a second terminal:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-5. Open `http://localhost:3000`.
+## What the repo provides for EC2
 
-### Quick local script
+- `scripts/ec2-user-data.sh`: installs Docker, clones/updates the repo, writes an `.env` into the app dir (priority: `ENV_B64` → `ENV_PLAIN` → SSM `SSM_PARAM`), optionally logs into ECR, and runs `docker compose -f docker-compose.production.yml up -d --build`.
+- `scripts/aws-ec2-bootstrap.sh`: an alternative bootstrapper that installs system packages and configures systemd services if you prefer not to use Docker.
+- `.env.production.example`: variables required for production (API keys, DB, BACKEND_URL, geocoder settings).
 
-To bootstrap and run both services together:
+## Option A — Quick deploy by embedding `.env` in user-data (fast)
+
+Use when you need a single-step deploy and understand that user-data is visible to account admins.
+
+Steps
+
+1. Create a completed `.env` locally from `.env.production.example` and fill in real values.
+2. Encode it as base64 (single line):
+   - Linux: `BASE64=$(base64 -w0 .env.production)`
+   - macOS: `BASE64=$(base64 .env.production | tr -d '\n')`
+3. Produce a `user-data` file that sets `ENV_B64` and appends the repo's script:
 
 ```bash
-chmod +x scripts/run-local.sh
-./scripts/run-local.sh
+REPO_URL="https://github.com/your-org/your-repo.git"
+APP_DIR="/opt/map_event_app"
+COMPOSE_FILE="docker-compose.production.yml"
+printf '#!/usr/bin/env bash\nENV_B64="%s"\nREPO_URL="%s"\nAPP_DIR="%s"\nCOMPOSE_FILE="%s"\n\n' \
+  "$BASE64" "$REPO_URL" "$APP_DIR" "$COMPOSE_FILE" > /tmp/user-data.sh
+cat scripts/ec2-user-data.sh >> /tmp/user-data.sh
+chmod 600 /tmp/user-data.sh
 ```
 
-The script will:
-
-- verify `.env` exists
-- create `backend/.venv` if needed
-- install backend requirements
-- install frontend dependencies if `node_modules` is missing
-- start backend and frontend
-- call `POST /jobs/refresh-events`
-- verify `/health`, `/events`, and the frontend home page
-
-Logs are written to `.run-backend.log` and `.run-frontend.log` in the repo root.
-If backend startup fails, the script now prints the recent backend log and points to the PostgreSQL setup helper.
-
-## Docker development
-
-If you prefer a Docker-based setup closer to your existing workflow:
-
-1. Copy `.env.docker.example` to `.env.docker`.
-2. Fill in `TICKETMASTER_API_KEY`.
-3. Start the stack:
-   ```bash
-   chmod +x scripts/run-docker.sh
-   ./scripts/run-docker.sh
-   ```
-
-This starts three containers:
-
-- `db`: PostgreSQL 16
-- `backend`: FastAPI on `http://localhost:8000`
-- `frontend`: Next.js on `http://localhost:3000`
-
-This Docker setup is now development-oriented:
-
-- frontend source is bind-mounted into the container
-- backend source is bind-mounted into the container
-- frontend keeps `node_modules` and `.next` inside Docker-managed volumes
-- backend runs `uvicorn --reload`
-- frontend runs `next dev`
-
-That means normal source edits should show up without rebuilding the images.
-
-The Docker env file uses these keys:
-
-- `TICKETMASTER_API_KEY`
-- `POSTGRES_DB`
-- `POSTGRES_USER`
-- `POSTGRES_PASSWORD`
-- `DATABASE_URL`
-- `BACKEND_URL`
-- `GEOCODER_BASE_URL`
-- `GEOCODER_USER_AGENT`
-- `GEOCODER_MIN_INTERVAL_SECONDS`
-
-The default Docker `DATABASE_URL` points at the Compose service name `db`, not `localhost`.
-The geocoder defaults target Nominatim and are only used when Ticketmaster venue coordinates are missing or invalid.
-
-If you change dependency manifests such as `frontend/package.json`, `frontend/package-lock.json`, or `backend/requirements.txt`, restart the containers. You only need a rebuild when the Docker image itself must change, such as a base image or Dockerfile change.
-
-## Docker production
-
-For a small EC2 deployment, use the production-specific files instead of the dev stack:
-
-1. Copy `.env.production.example` to `.env.production`.
-2. Fill in the real values, especially:
-   - `TICKETMASTER_API_KEY`
-   - `POSTGRES_PASSWORD`
-   - `DATABASE_URL`
-   - `BACKEND_URL`
-3. Build and start:
-   ```bash
-   docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
-   ```
-
-Production files:
-
-- `backend/Dockerfile.production`
-- `frontend/Dockerfile.production`
-- `docker-compose.production.yml`
-
-These are intentionally leaner than the dev stack:
-
-- frontend builds as a Next.js standalone server
-- backend runs a single Uvicorn worker
-- no bind mounts or live reload
-- PostgreSQL memory is tuned down for a small instance
-- service memory limits are set for a roughly 1 GB host budget
-
-Practical note for a `t4g.micro` or `t4.micro`-class instance with 1 GiB RAM:
-
-- this setup is about as small as you should run it
-- enable swap on the EC2 instance to reduce OOM risk during spikes or refresh jobs
-- avoid running other memory-heavy services on the same machine
-- if usage grows, increase instance size before adding more workers
-
-## Environment variables
-
-- `TICKETMASTER_API_KEY`: Ticketmaster Discovery API key.
-- `DATABASE_URL`: PostgreSQL SQLAlchemy async URL. Example:
-  `postgresql+asyncpg://map_event_app:map_event_app@localhost:5432/map_event_app`
-- `BACKEND_URL`: Backend base URL used by the frontend. Example:
-  `http://localhost:8000`
-
-## PostgreSQL on EC2
-
-Run PostgreSQL on the same EC2 instance as the FastAPI app for this MVP.
-
-- Install PostgreSQL directly on the instance.
-- Store the PostgreSQL data directory on an attached EBS volume.
-- Mount the EBS volume on boot and point PostgreSQL storage to that mounted path.
-- Restrict inbound access so PostgreSQL is not publicly exposed unless you explicitly need admin access.
-- Keep app and database on the same host and connect through the local network interface.
-
-### EC2 bootstrap helper
-
-You can automate part of the instance setup with:
+4. Launch the EC2 instance with that user-data:
 
 ```bash
-chmod +x scripts/aws-ec2-bootstrap.sh
-sudo APP_DIR=/opt/map_event_app POSTGRES_APP_PASSWORD='replace-this' ./scripts/aws-ec2-bootstrap.sh
+aws ec2 run-instances \
+  --image-id ami-0123456789abcdef0 \
+  --instance-type t3.small \
+  --count 1 \
+  --key-name my-key \
+  --security-group-ids sg-01234567 \
+  --subnet-id subnet-01234567 \
+  --user-data file:///tmp/user-data.sh \
+  --iam-instance-profile Name=EC2SSMRole \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=map-event-app}]'
 ```
 
-This helper is intentionally scoped to bootstrapping an Ubuntu EC2 instance after you have already:
+Notes
 
-- launched the EC2 instance
-- attached and mounted your EBS volume
-- copied the repo onto the machine
-- created the app `.env`
+- `ENV_B64` is decoded on boot and written to `$APP_DIR/.env` with `chmod 600`.
+- The script then pulls/builds images and starts the stack.
 
-It does not create EC2 instances, VPCs, security groups, or EBS volumes for you. Those can be scripted with the AWS CLI or Terraform, but that requires your AWS account/networking choices and is better handled as a separate infrastructure script rather than hidden inside app bootstrap logic.
+## Option B — Production: CI → ECR → EC2 (recommended)
 
-## Backend startup
+Flow
 
-Use the backend service with:
+1. CI (e.g., GitHub Actions) builds backend/frontend images and pushes to ECR.
+2. Store `.env` or just secrets in SSM Parameter Store (SecureString) or Secrets Manager.
+3. Provision EC2 with an IAM instance profile that allows SSM read and ECR pulls.
+4. Use a lightweight user-data: log into ECR, fetch SSM parameter into `$APP_DIR/.env`, then `docker compose pull` and `docker compose up -d`.
+
+IAM policy example (attach to instance role):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect":"Allow","Action":["ssm:GetParameter","ssm:GetParameters"],"Resource":["arn:aws:ssm:REGION:ACCOUNT_ID:parameter/map_event_app*"]},
+    {"Effect":"Allow","Action":["ecr:GetAuthorizationToken","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer"],"Resource":"*"}
+  ]
+}
+```
+
+Create an SSM parameter:
 
 ```bash
-cd backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+aws ssm put-parameter --name "/map_event_app/.env" \
+  --value "$(cat .env.production)" \
+  --type "SecureString" --overwrite
 ```
 
-What happens on startup:
+## Terraform example (EC2 instance with `user_data`)
 
-- SQLAlchemy creates the tables if they do not exist.
-- APScheduler starts a nightly refresh job at `1:00 AM` server time.
-- If the `events` table is empty, the app performs a one-time Ticketmaster refresh.
+```hcl
+resource "aws_instance" "app" {
+  ami           = "ami-0123456789abcdef0"
+  instance_type = "t3.small"
+  subnet_id     = aws_subnet.app_subnet.id
+  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
+  user_data = file("./user-data.sh")
+  tags = { Name = "map-event-app" }
+}
+```
 
-## Frontend startup
+## Verify and troubleshoot
 
-Use the frontend service with:
+- Inspect cloud-init / user-data logs in the EC2 console system log.
+- Use `aws ssm start-session --target <instance-id>` to inspect files without opening SSH.
+- Confirm `$APP_DIR/.env` exists and contains expected values.
+- Inspect Docker compose status:
 
 ```bash
-cd frontend
-npm run build
-npm run start
+docker compose -f docker-compose.production.yml ps
+docker compose -f docker-compose.production.yml logs --tail 200
 ```
 
-The frontend reads `BACKEND_URL` at build/runtime through Next.js config and uses it for `/events`.
+Common issues
 
-## Nightly refresh job
+- Missing `.env`: ensure `ENV_B64` was embedded, `ENV_PLAIN` provided, or SSM parameter exists and the instance role can read it.
+- Permission errors fetching SSM: attach a minimal policy with `ssm:GetParameter` and `kms:Decrypt` (if applicable) to the instance role.
+- Docker run failures: check instance resources (add swap or increase instance size) and inspect `docker compose logs`.
 
-The backend scheduler runs every night at `1:00 AM` server time.
+## EBS / PostgreSQL note
 
-The job:
+For durability, store PostgreSQL data on an attached EBS volume and mount it before starting the service. The repo's `scripts/aws-ec2-bootstrap.sh` shows an example of setting PostgreSQL data directory and creating the DB user.
 
-- fetches Vancouver events for the next 30 days from Ticketmaster
-- normalizes them into the app event model
-- upserts by `id` and enforces `UNIQUE(source, source_event_id)`
-- updates `last_seen_at`
-- removes expired events without wiping the full table
+## Security recommendations
 
-For local development, you can trigger the same logic manually:
+- Prefer SSM/Secrets Manager + instance role for secrets over embedding sensitive values in user-data.
+- Restrict EC2 security group to only required ports (80/443) and avoid exposing PostgreSQL publicly.
+- Use SSM Session Manager rather than opening SSH if possible.
 
-```bash
-curl -X POST http://localhost:8000/jobs/refresh-events
-```
+---
 
-## EBS persistence concept
+If you want a ready-to-launch `/tmp/user-data.sh` that embeds your `.env.production.example` as `ENV_B64`, or a GitHub Actions workflow that pushes to ECR, tell me which and I'll prepare it.
 
-For EC2 persistence, the EBS volume is the durable layer and the EC2 instance is the compute layer.
+---
 
-- Attach an EBS volume to the EC2 instance.
-- Format and mount it to a stable path such as `/var/lib/postgresql-data`.
-- Configure PostgreSQL to use that mounted path as its data directory.
-- On instance replacement, reattach the EBS volume to the new EC2 host and remount it before starting PostgreSQL.
-- Snapshot the EBS volume regularly if you want backup/recovery coverage.
+If you want, I can:
+
+- produce a ready-to-launch `/tmp/user-data.sh` that embeds your `.env.production.example` as `ENV_B64`, or
+- add a GitHub Actions workflow that builds & pushes the images to ECR and an EC2 `user-data` that pulls them.
+
+Tell me which and I will prepare the files.

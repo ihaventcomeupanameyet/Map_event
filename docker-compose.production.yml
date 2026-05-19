@@ -63,7 +63,7 @@ services:
     environment:
       BACKEND_URL: ${BACKEND_URL}
     ports:
-      - "3000:3000"
+      - "80:3000"
     mem_limit: 192m
 
 volumes:

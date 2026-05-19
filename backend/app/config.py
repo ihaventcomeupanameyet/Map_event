@@ -1,7 +1,9 @@
+import json
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,7 +38,31 @@ class Settings(BaseSettings):
     refresh_window_days: int = 30
     scheduler_hour: int = 1
     scheduler_minute: int = 0
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
+        alias="CORS_ORIGINS",
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, value: object) -> object:
+        if value is None or isinstance(value, list):
+            return value
+
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not normalized:
+                return []
+
+            if normalized.startswith("["):
+                parsed = json.loads(normalized)
+                if not isinstance(parsed, list):
+                    raise ValueError("CORS_ORIGINS JSON value must be a list.")
+                return parsed
+
+            return [item.strip() for item in normalized.split(",") if item.strip()]
+
+        return value
 
     model_config = SettingsConfigDict(
         env_file=(ROOT_DIR / ".env", BACKEND_DIR / ".env"),

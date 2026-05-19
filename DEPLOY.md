@@ -6,6 +6,7 @@ This document focuses on deploying the project to an AWS EC2 instance without ma
 
 - `Makefile`: wraps the production compose workflow with `make prod-up`, `make prod-down`, `make prod-restart`, `make prod-logs`, `make prod-ps`, and `make prod-refresh`.
 - `scripts/ec2-user-data.sh`: installs Docker and `make`, clones/updates the repo, writes an `.env` into the app dir (priority: `ENV_B64` → `ENV_PLAIN` → SSM `SSM_PARAM`), optionally logs into ECR, and runs the production Makefile targets.
+  It also enables the Docker daemon and adds common EC2 login users (`ubuntu`, `ec2-user`) to the `docker` group.
 - `scripts/aws-ec2-bootstrap.sh`: an alternative bootstrapper that installs system packages and configures systemd services if you prefer not to use Docker.
 - `.env.production.example`: variables required for production (API keys, DB, BACKEND_URL, geocoder settings).
 
@@ -31,6 +32,7 @@ Use when you need a single-step deploy and understand that user-data is visible 
 Steps
 
 1. Create a completed `.env` locally from `.env.production.example` and fill in real values.
+   Set `BACKEND_URL` to the public backend address (for example `http://YOUR_EC2_PUBLIC_IP:8000`) and `CORS_ORIGINS` to the frontend origin (for example `http://YOUR_EC2_PUBLIC_IP:3000`).
 2. Encode it as base64 (single line):
    - Linux: `BASE64=$(base64 -w0 .env.production)`
    - macOS: `BASE64=$(base64 .env.production | tr -d '\n')`
@@ -119,6 +121,8 @@ resource "aws_instance" "app" {
 make prod-ps
 make prod-logs
 ```
+
+If `docker ps` returns a socket permission error after SSH login, either run `sudo docker ps` or re-login after the bootstrap script has added your login user to the `docker` group.
 
 Common issues
 

@@ -7,7 +7,7 @@ set -euo pipefail
 # Makefile targets. Usage: pass `REPO_URL` and optionally `SSM_PARAM` via EC2
 # user-data or metadata.
 
-REPO_URL="${REPO_URL:-https://github.com/your-org/your-repo.git}"
+REPO_URL="${REPO_URL:-https://github.com/ihaventcomeupanameyet/Map_event}"
 APP_DIR="${APP_DIR:-/opt/map_event_app}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
 SSM_PARAM="${SSM_PARAM:-/map_event_app/.env}"
@@ -16,6 +16,7 @@ MAKE_BIN="${MAKE_BIN:-make}"
 MAKE_TARGET_UP="${MAKE_TARGET_UP:-prod-up}"
 MAKE_TARGET_PULL="${MAKE_TARGET_PULL:-prod-pull}"
 MAKE_TARGET_PS="${MAKE_TARGET_PS:-prod-ps}"
+DOCKER_USERS="${DOCKER_USERS:-ubuntu ec2-user}"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "This script must be run as root"
@@ -41,6 +42,31 @@ fi
 if ! command -v aws >/dev/null 2>&1; then
   apt-get update
   apt-get install -y awscli || (apt-get install -y python3-pip && pip3 install --no-cache-dir awscli)
+fi
+
+# Ensure the Docker daemon is enabled and available before compose commands run.
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable --now docker || true
+  systemctl enable --now containerd || true
+fi
+
+if ! getent group docker >/dev/null 2>&1; then
+  groupadd docker
+fi
+
+for docker_user in $DOCKER_USERS; do
+  if id -u "$docker_user" >/dev/null 2>&1; then
+    usermod -aG docker "$docker_user" || true
+  fi
+done
+
+if command -v docker >/dev/null 2>&1; then
+  for _ in $(seq 1 30); do
+    if docker info >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
 fi
 
 # Create application directory and clone or update repo

@@ -55,13 +55,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.production
-      args:
-        BACKEND_URL: ${BACKEND_URL}
     restart: unless-stopped
     depends_on:
       - backend
     environment:
-      BACKEND_URL: ${BACKEND_URL}
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend:8000}
     ports:
       - "80:3000"
     mem_limit: 192m

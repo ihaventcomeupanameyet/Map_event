@@ -32,7 +32,7 @@ Use when you need a single-step deploy and understand that user-data is visible 
 Steps
 
 1. Create a completed `.env` locally from `.env.production.example` and fill in real values.
-   Set `BACKEND_URL` to the public backend address (for example `http://YOUR_EC2_PUBLIC_IP:8000`) and `CORS_ORIGINS` to the frontend origin (for example `http://YOUR_EC2_PUBLIC_IP:3000`).
+   The production frontend proxies API calls through Next.js, so it does not need a public backend URL in the browser.
 2. Encode it as base64 (single line):
    - Linux: `BASE64=$(base64 -w0 .env.production)`
    - macOS: `BASE64=$(base64 .env.production | tr -d '\n')`

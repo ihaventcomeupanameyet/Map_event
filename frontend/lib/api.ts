@@ -16,12 +16,9 @@ export type EventRecord = {
   imageUrl?: string | null;
 };
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-
-
 export async function fetchEvents(selectedDate: string): Promise<EventRecord[]> {
   const response = await fetch(
-    `${BACKEND_URL}/events?date=${encodeURIComponent(selectedDate)}`,
+    `/api/events?date=${encodeURIComponent(selectedDate)}`,
     {
       cache: "no-store",
     },

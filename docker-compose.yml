@@ -45,14 +45,12 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        BACKEND_URL: ${BACKEND_URL}
     restart: unless-stopped
     depends_on:
       - backend
     environment:
       NODE_ENV: development
-      BACKEND_URL: ${BACKEND_URL}
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://backend:8000}
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
     ports:

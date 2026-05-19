@@ -25,10 +25,11 @@ async def run_refresh_job() -> None:
         try:
             stats = await refresh_events(session, settings=settings)
             logger.info(
-                "Event refresh completed. fetched=%s upserted=%s removed_expired=%s",
+                "Event refresh completed. fetched=%s upserted=%s removed_expired=%s removed_stale=%s",
                 stats.fetched,
                 stats.upserted,
                 stats.removed_expired,
+                stats.removed_stale,
             )
         except Exception:
             logger.exception("Nightly refresh job failed")
@@ -99,5 +100,5 @@ async def refresh_events_endpoint(
         fetched=stats.fetched,
         upserted=stats.upserted,
         removedExpired=stats.removed_expired,
+        removedStale=stats.removed_stale,
     )
-

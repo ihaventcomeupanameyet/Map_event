@@ -1,12 +1,28 @@
 - Deploy and Run (EC2-focused)
 
-This document focuses on deploying the project to an AWS EC2 instance without manually SSH-ing into the machine. It assumes you will use the included user-data script `scripts/ec2-user-data.sh` or a CI-built image flow.
+This document focuses on deploying the project to an AWS EC2 instance without manually SSH-ing into the machine. It assumes you will use the included user-data script `scripts/ec2-user-data.sh`, the production `Makefile` targets, or a CI-built image flow.
 
 ## What the repo provides for EC2
 
-- `scripts/ec2-user-data.sh`: installs Docker, clones/updates the repo, writes an `.env` into the app dir (priority: `ENV_B64` → `ENV_PLAIN` → SSM `SSM_PARAM`), optionally logs into ECR, and runs `docker compose -f docker-compose.production.yml up -d --build`.
+- `Makefile`: wraps the production compose workflow with `make prod-up`, `make prod-down`, `make prod-restart`, `make prod-logs`, `make prod-ps`, and `make prod-refresh`.
+- `scripts/ec2-user-data.sh`: installs Docker and `make`, clones/updates the repo, writes an `.env` into the app dir (priority: `ENV_B64` → `ENV_PLAIN` → SSM `SSM_PARAM`), optionally logs into ECR, and runs the production Makefile targets.
 - `scripts/aws-ec2-bootstrap.sh`: an alternative bootstrapper that installs system packages and configures systemd services if you prefer not to use Docker.
 - `.env.production.example`: variables required for production (API keys, DB, BACKEND_URL, geocoder settings).
+
+## Local production-mode commands
+
+Use these from the repo root:
+
+```bash
+make prod-up
+make prod-down
+make prod-restart
+make prod-logs
+make prod-ps
+make prod-refresh
+```
+
+Unlike the dev compose file, the production stack bakes code into the image. If backend code changes, use `make prod-up` or `make prod-restart` so the image is rebuilt.
 
 ## Option A — Quick deploy by embedding `.env` in user-data (fast)
 
@@ -57,7 +73,7 @@ Flow
 1. CI (e.g., GitHub Actions) builds backend/frontend images and pushes to ECR.
 2. Store `.env` or just secrets in SSM Parameter Store (SecureString) or Secrets Manager.
 3. Provision EC2 with an IAM instance profile that allows SSM read and ECR pulls.
-4. Use a lightweight user-data: log into ECR, fetch SSM parameter into `$APP_DIR/.env`, then `docker compose pull` and `docker compose up -d`.
+4. Use a lightweight user-data: log into ECR, fetch SSM parameter into `$APP_DIR/.env`, then run `make prod-pull` and `make prod-up`.
 
 IAM policy example (attach to instance role):
 
@@ -100,8 +116,8 @@ resource "aws_instance" "app" {
 - Inspect Docker compose status:
 
 ```bash
-docker compose -f docker-compose.production.yml ps
-docker compose -f docker-compose.production.yml logs --tail 200
+make prod-ps
+make prod-logs
 ```
 
 Common issues

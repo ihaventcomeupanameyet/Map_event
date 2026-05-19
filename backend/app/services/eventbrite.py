@@ -9,12 +9,17 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.config import Settings
-from app.services.location import geocode_address, normalize_coordinates
+from app.services.location import (
+    geocode_address,
+    is_vancouver_area_coordinate,
+    normalize_coordinates,
+)
 
 
 ORGANIZERS_FILE = Path(__file__).resolve().parents[1] / "data" / "eventbrite_vancouver_organizers.json"
 EVENTBRITE_ORGANIZER_EVENTS_PATH = "/organizers/{organizer_id}/events/"
 EVENTBRITE_ME_PATH = "/users/me/"
+METRO_VANCOUVER_REGION_NAMES = {"bc", "british columbia"}
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +49,37 @@ def _format_error_detail(response: httpx.Response) -> str:
 
     details = [payload.get("error"), payload.get("error_description")]
     return " - ".join(part for part in details if part)
+
+
+def _normalize_country_code(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    upper = normalized.upper()
+    if len(upper) == 2:
+        return upper
+
+    lowered = normalized.casefold()
+    if lowered == "canada":
+        return "CA"
+    if lowered in {"united states", "united states of america", "usa"}:
+        return "US"
+    return None
+
+
+def _is_allowed_region(value: str | None) -> bool:
+    if not isinstance(value, str):
+        return True
+
+    normalized = value.strip().casefold().replace(".", "")
+    if not normalized:
+        return True
+
+    return normalized in METRO_VANCOUVER_REGION_NAMES
 
 
 def _load_seed_organizers() -> list[dict[str, str]]:
@@ -103,6 +139,7 @@ async def fetch_eventbrite_events(
         organizer_id = organizer["organizer_id"]
         page = 1
         organizer_event_count = 0
+        organizer_skipped_location_count = 0
 
         while True:
             params = {
@@ -139,8 +176,15 @@ async def fetch_eventbrite_events(
                 state = address.get("region")
                 postal_code = address.get("postal_code")
                 raw_country = address.get("country")
-                country_code = raw_country.upper() if isinstance(raw_country, str) and len(raw_country) == 2 else None
+                country_code = _normalize_country_code(raw_country)
                 country_name = "Canada" if country_code == "CA" else raw_country
+
+                if country_code and country_code != settings.events_country_code:
+                    organizer_skipped_location_count += 1
+                    continue
+                if not _is_allowed_region(state):
+                    organizer_skipped_location_count += 1
+                    continue
 
                 coordinates = normalize_coordinates(
                     venue.get("latitude"),
@@ -163,6 +207,9 @@ async def fetch_eventbrite_events(
                     if coordinates is None:
                         continue
                 latitude, longitude = coordinates
+                if not is_vancouver_area_coordinate(latitude, longitude):
+                    organizer_skipped_location_count += 1
+                    continue
 
                 start_time = _parse_iso_datetime((raw_event.get("start") or {}).get("utc"))
                 if start_time is None or start_time > end:
@@ -213,10 +260,11 @@ async def fetch_eventbrite_events(
             page += 1
 
         logger.info(
-            "Eventbrite organizer fetch completed. organizer_id=%s organizer=%s fetched=%s",
+            "Eventbrite organizer fetch completed. organizer_id=%s organizer=%s fetched=%s skipped_outside_vancouver=%s",
             organizer_id,
             organizer["name"],
             organizer_event_count,
+            organizer_skipped_location_count,
         )
 
     deduplicated_events = list(

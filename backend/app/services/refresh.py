@@ -24,6 +24,7 @@ class RefreshStats:
     fetched: int
     upserted: int
     removed_expired: int
+    removed_stale: int
 
 
 async def is_events_table_empty(session: AsyncSession) -> bool:
@@ -45,6 +46,7 @@ async def refresh_events(
 
     try:
         normalized_events = []
+        successful_providers: list[str] = []
         providers = [
             ("ticketmaster", fetch_ticketmaster_events),
             ("eventbrite", fetch_eventbrite_events),
@@ -54,6 +56,7 @@ async def refresh_events(
             try:
                 provider_events = await fetcher(client, settings)
                 normalized_events.extend(provider_events)
+                successful_providers.append(provider_name)
                 logger.info(
                     "Provider refresh completed. provider=%s fetched=%s",
                     provider_name,
@@ -91,10 +94,23 @@ async def refresh_events(
 
     delete_stmt = delete(Event).where(or_(expired_condition, invalid_location_condition))
     delete_result = await session.execute(delete_stmt)
+
+    removed_stale = 0
+    if successful_providers:
+        stale_stmt = delete(Event).where(
+            and_(
+                Event.source.in_(successful_providers),
+                Event.last_seen_at < now,
+            )
+        )
+        stale_result = await session.execute(stale_stmt)
+        removed_stale = stale_result.rowcount or 0
+
     await session.commit()
 
     return RefreshStats(
         fetched=len(normalized_events),
         upserted=upserted,
         removed_expired=delete_result.rowcount or 0,
+        removed_stale=removed_stale,
     )

@@ -3,14 +3,19 @@
 set -euo pipefail
 
 # Simple EC2 user-data script to provision an Ubuntu instance, clone the repo,
-# fetch an env file from SSM (optional), install Docker, and run docker compose.
-# Usage: pass `REPO_URL` and optionally `SSM_PARAM` via EC2 user-data or metadata.
+# fetch an env file from SSM (optional), install Docker, and run the production
+# Makefile targets. Usage: pass `REPO_URL` and optionally `SSM_PARAM` via EC2
+# user-data or metadata.
 
 REPO_URL="${REPO_URL:-https://github.com/your-org/your-repo.git}"
 APP_DIR="${APP_DIR:-/opt/map_event_app}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
 SSM_PARAM="${SSM_PARAM:-/map_event_app/.env}"
 ECR_REGISTRY="${ECR_REGISTRY:-}"
+MAKE_BIN="${MAKE_BIN:-make}"
+MAKE_TARGET_UP="${MAKE_TARGET_UP:-prod-up}"
+MAKE_TARGET_PULL="${MAKE_TARGET_PULL:-prod-pull}"
+MAKE_TARGET_PS="${MAKE_TARGET_PS:-prod-ps}"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo "This script must be run as root"
@@ -19,7 +24,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl gnupg lsb-release git jq || true
+apt-get install -y ca-certificates curl gnupg lsb-release git jq make || true
 
 # Install Docker if missing
 if ! command -v docker >/dev/null 2>&1; then
@@ -80,11 +85,18 @@ if [[ -n "$ECR_REGISTRY" ]]; then
   aws ecr get-login-password | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 fi
 
-# Start the app with docker compose (production compose file by default)
-docker compose -f "$COMPOSE_FILE" pull || true
-docker compose -f "$COMPOSE_FILE" up -d --build
-
-echo "Deployment complete. Docker compose status:"
-docker compose -f "$COMPOSE_FILE" ps || true
+# Start the app using Makefile production targets. Pull remains optional so the
+# same script can work for image-based and local-build production flows.
+if [[ -f Makefile ]]; then
+  "$MAKE_BIN" "$MAKE_TARGET_PULL" || true
+  "$MAKE_BIN" "$MAKE_TARGET_UP"
+  echo "Deployment complete. Make target status:"
+  "$MAKE_BIN" "$MAKE_TARGET_PS" || true
+else
+  docker compose -f "$COMPOSE_FILE" pull || true
+  docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
+  echo "Deployment complete. Docker compose status:"
+  docker compose -f "$COMPOSE_FILE" ps || true
+fi
 
 exit 0

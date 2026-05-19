@@ -27,6 +27,6 @@ class RefreshResponse(BaseModel):
     fetched: int
     upserted: int
     removed_expired: int = Field(alias="removedExpired")
+    removed_stale: int = Field(alias="removedStale")
 
     model_config = ConfigDict(populate_by_name=True)
-
